@@ -1,10 +1,10 @@
-#CS 534 - Artificial Intelligence | Assignment-1 | Group-5 | README file
+# CS 534 - Artificial Intelligence | Assignment-1 | Group-5 | README file
 
 ReadMe file of the submission by Group-5 to Assignment-1 for solving Heavy Queens and 9N/8 Queens problem.
 
-##Heavy Queens Problem
+## Heavy Queens Problem
 
-##A-star & Greedy Search
+## A-star & Greedy Search
 
 - A-star and Greedy algorithm algorithm were implemented in Python and saved as 'Greedy_and_Astar.py' file. 
 
@@ -14,9 +14,9 @@ ReadMe file of the submission by Group-5 to Assignment-1 for solving Heavy Queen
 
 ---
 
-##9N/8 Queens Problem
+## 9N/8 Queens Problem
 
-##Genetic Algorithm
+## Genetic Algorithm
 
 - The implementation of the Genetic algorithm is saved in file 'Genetic.py'. 
 
@@ -24,7 +24,7 @@ ReadMe file of the submission by Group-5 to Assignment-1 for solving Heavy Queen
 
 - The code shall give the output in terms of the steps taken by the Genetic algorithm and also display the cost of the same as defined in the assignment write-up. A default address is already fed into the code for the .csv file.
 
-##Hill Climbing Search
+## Hill Climbing Search
 
 - Hill Climbing algorithm was implemented in Python and saved in 'HillClimbing.py' file. 
 
