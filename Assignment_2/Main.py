@@ -12,6 +12,7 @@ from numpy import mean
 from numpy import absolute
 from numpy import sqrt
 from sklearn.metrics import r2_score
+import pickle
 
 class CSV_:
 
@@ -213,6 +214,8 @@ loss = rmse(Ytest, preds)
 print("Error",loss)
 accuracy = r2_score(Ytest, preds)
 print("Accuracy",accuracy)
+filename = 'finalized_model.sav'
+pickle.dump(model, open(filename, 'wb'))
 
 
         
