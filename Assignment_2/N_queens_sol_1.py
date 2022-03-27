@@ -204,7 +204,7 @@ while counter < 50000:
     for boards in new_list:
         new_cost = 0
         for i in range(len(queen_pos)):
-            new_cost += abs(int(queen_pos[i][0]) - int(boards[i])) * (queen_weight[i]**2)
+            new_cost += abs(int(queen_pos[i][0]) - int(boards[i]-1)) * (queen_weight[i]**2) # -1 ADDED AS INDEX STARTS FROM 1 RATHER THAN 0
         if new_cost < cost:
             cost = new_cost
     csv_.creatCSV_board(board, cost, "F:\Study\Artificial Intelligence - CS 534\Assignments\Assignment_2\\Data\\N5.txt")
