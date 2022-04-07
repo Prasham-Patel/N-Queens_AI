@@ -61,6 +61,8 @@ class Node:
         self.counter_down = 0
         self.counter_right = 0
         self.counter_left = 0
+        self.counter = 0
+        self.iter = 0
 
     def get_Q_value(self, action):
         if action == "up":
@@ -102,7 +104,7 @@ class Node:
     def get_print_action(self):
         if self.tag is None or self.tag == "START":
             max_value = max([self.Q_up, self.Q_down, self.Q_left, self.Q_right])
-            print(max_value)
+            # print(max_value)
             if max_value <= 0:
                 x = 0
                 y = 0
@@ -140,6 +142,14 @@ class Node:
             state = self.terminal
         return x, y, state
 
+    def avg_timeOnNode(self, total_iter):
+        # counter = self.counter_up + self.counter_down + self.counter_left + self.counter_right
+        # print("counter = ", self.counter)
+        # print("total iter = ", total_iter)
+        # print("__________________")
+
+        return int(self.counter*100/total_iter)
+
     def counter_update(self, action):
         if action == "up":
             self.counter_up += 1
@@ -151,6 +161,12 @@ class Node:
             self.counter_left += 1
         else:
             print("Error: WRONG ACTION GIVEN")
+
+    def total_counter_update(self, iter):
+        if self.iter != iter:
+            self.counter += 1
+
+        self.iter = iter
 
     def get_count(self, action):
         if action == "up":
@@ -206,7 +222,7 @@ class world:
         #     for j in range(m):
         #         grid[i][j] = Node((i, j))
 
-        a = n * m / 10
+        a = 3# n * m / 10
         p_terminal = random.randint(1, int(a))
         n_terminal = random.randint(1, int(a))
         barrier = random.randint(1, int(a))
@@ -349,7 +365,7 @@ class world:
         else:
             return np.random.choice(new_actions)
 
-    def draw_path(self, title = "heat map"):
+    def direction_map(self, title = "direction map"):
         # Visualization of the found path using matplotlib
         fig, ax = plt.subplots(1)
         ax.margins()
@@ -359,23 +375,25 @@ class world:
         for i in range(row):
             for j in range(col):
                 x, y, state = self.node_World[i][j].get_print_action()
+                avg_time = self.node_World[i][j].avg_timeOnNode(self.iter)
                 if state == "BARRIER":
                     ax.add_patch(Rectangle((j - 0.5, i - 0.5), 1, 1, edgecolor='k', facecolor='k'))  # free space
                 elif state == "START":
                     ax.add_patch(Rectangle((j - 0.5, i - 0.5), 1, 1, edgecolor='k', facecolor='b'))
                     ax.arrow(j - y, i - x, y, x, fc="k", ec="k", head_width=0.1,
                              head_length=0.1)
-                    plt.annotate('Start', ha='center', va='bottom', xytext=(j, i), xy=(j, i))
+                    plt.annotate('Start', ha='center', va='bottom', xytext=(j, i-0.1), xy=(j, i-0.1))
                 elif state >= 1:
                     ax.add_patch(Rectangle((j - 0.5, i - 0.5), 1, 1, edgecolor='k', facecolor='g'))
-                    plt.annotate(str(state), ha='center', va='bottom', xytext=(j, i), xy=(j, i))
+                    plt.annotate(str(state), ha='center', va='bottom', xytext=(j, i-0.1), xy=(j, i-0.1))
                 elif state <= -1:
                     ax.add_patch(Rectangle((j - 0.5, i - 0.5), 1, 1, edgecolor='k', facecolor='r'))
-                    plt.annotate(str(state), ha='center', va='bottom', xytext=(j, i), xy=(j, i))
+                    plt.annotate(str(state), ha='center', va='bottom', xytext=(j, i-0.1), xy=(j, i-0.1))
                 else:
                     ax.add_patch(Rectangle((j - 0.5, i - 0.5), 1, 1, edgecolor='k', facecolor='w'))
                     if x != 0 or y != 0:
                         ax.arrow(j - y, i - x, y, x, fc="k", ec="k", head_width=0.1, head_length=0.1)
+                        plt.annotate(str(avg_time), ha='center', va='bottom', xytext=(j, i-0.1), xy=(j, i-0.1))
 
         # Graph settings
         plt.title(title)
@@ -383,10 +401,12 @@ class world:
         plt.gca().invert_yaxis()
         plt.show()
 
+    # def heat_map (self, title = "")
+
     def Q_learning(self):
         t_init = time.time()
         t_end = time.time()
-        iter = 0
+        self.iter = 0
 
         while t_end - t_init <= self.time_to_learn:
             # restart from the start position
@@ -427,26 +447,27 @@ class world:
                 first = False
                 t_end = time.time()  # to cancel the sleep time
 
-            iter += 1
+            self.iter += 1
             # print(iter)
 
     def SARSA(self):
         t_init = time.time()
         t_end = time.time()
-        iter = 0
+        self.iter = 0
 
         while t_end - t_init <= self.time_to_learn:
             # restart from the start position
             current_node = self.node_World[self.start[0]][self.start[1]]
-            action = self.policy_counter( current_node)  # Exploration policy of the agent
+            action = self.policy_counter(current_node)  # Exploration policy of the agent
             current_node.counter_update(action)
+            current_node.total_counter_update(self.iter)
             new_pos = self.takeAction([current_node.row, current_node.col], action)  # the action that agent actually took
             first = True
             while first or (not abs(current_node.terminal) > 0 and t_end - t_init <= self.time_to_learn):
                 # new node after the action we took
                 new_node = self.node_World[new_pos[0]][new_pos[1]]
                 new_action = self.policy_counter(new_node)
-                new_node.counter_update(new_action)
+                # new_node.counter_update(new_action)
 
                 #   Return max expected pay off for new state
                 Q_ns_na = new_node.get_Q_value(new_action)
@@ -463,8 +484,11 @@ class world:
                 update_value = Q_s_a + self.alpha * (reward + (self.gamma * Q_ns_na) - Q_s_a)
 
                 # update step
+
+                new_node.total_counter_update(self.iter)
                 current_node.update(action, update_value)
                 current_node = new_node
+                current_node.counter_update(action)
                 action = new_action
                 new_pos = self.takeAction([current_node.row, current_node.col], action)
 
@@ -480,7 +504,7 @@ class world:
                 first = False
                 t_end = time.time()  # to cancel the sleep time
 
-            iter += 1
+            self.iter += 1
             # print(iter)
 
 if __name__ == '__main__':
@@ -502,7 +526,7 @@ if __name__ == '__main__':
 
         grid_world = world(file, reward_per_action, gamma, time_to_learn, prob_of_moving)
         # grid_world.get_grid()
-        grid_world.random_grid(5, 8)
+        grid_world.random_grid(40, 40)
         grid_world.SARSA()
-        grid_world.draw_path()
+        grid_world.direction_map()
         # print(grid_world.grid)
