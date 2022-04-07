@@ -40,11 +40,19 @@ class Node:
         self.row = row
         self.col = col
         self.terminal = 0
+        self.tag = None
+
+        # Q values for all 4 possible actions
         self.Q_up = 0
         self.Q_down = 0
         self.Q_right = 0
         self.Q_left = 0
-        self.tag = None
+
+        # keep track of number of time agent took the same action
+        self.counter_up = 0
+        self.counter_down = 0
+        self.counter_right = 0
+        self.counter_left = 0
 
     def get_Q_value(self, action):
         if action == "up":
@@ -70,6 +78,24 @@ class Node:
         else:
             print("Error: WRONG ACTION GIVEN")
 
+    def get_max_action(self):
+        actions = [self.Q_up, self.Q_down, self.Q_right, self.Q_left]
+        action = max(actions)
+        index = actions.index(action)
+
+        if index == 0:
+            return "up"
+        if index == 1:
+            return "down"
+        if index == 2:
+            return "right"
+        if index == 3:
+            return "left"
+
+
+    def counter(self):
+        pass
+
 class world:
 
     def __init__(self, file, reward_per_action, gamma, time_to_learn, prob_of_moving):
@@ -94,7 +120,7 @@ class world:
                 elif "S" == e:
                     self.start =[i,j]
                     self.node_World[i][j].tag = "START"
-                elif int(e) > 0:
+                elif abs(int(e)) > 0:
                     self.node_World[i][j].terminal = int(e)
                     self.node_World[i][j].tag = "Terminal"
 
@@ -174,6 +200,13 @@ class world:
         action = np.random.choice(actions)
         return action
 
+    def policy_Epsilon_greedy(self, eps, current_node):
+        p = np.random.random()
+        if p <= eps:
+            return self.policy_random()
+        elif p > eps:
+            return current_node.get_max_action()
+
     def Q_learning(self):
         t_init = time.time()
         t_end = time.time()
@@ -182,11 +215,9 @@ class world:
         while t_end - t_init <= self.time_to_learn:
             # restart from the start position
             current_node = self.node_World[self.start[0]][self.start[1]]
-            while not current_node.terminal > 0 and t_end - t_init <= self.time_to_learn:
-                action = self.policy_random()      # Exploration policy of the agent
-                print(action)
+            while not abs(current_node.terminal) > 0 and t_end - t_init <= self.time_to_learn:
+                action = self.policy_Epsilon_greedy(0.01, current_node)      # Exploration policy of the agent
                 new_pos = self.takeAction([current_node.row, current_node.col], action)     # the action that agent actually took
-                print("new", new_pos)
                 new_node = self.node_World[new_pos[0]][new_pos[1]]      # new node after the action we took
 
                 #   Return max expected pay off for new state
@@ -203,14 +234,17 @@ class world:
                 current_node = new_node
 
                 # debug
-                print(current_node.row, current_node.col)
-                if current_node.tag == "Terminal":
-                    print("DONE")
-                    time.sleep(1)
-                print(current_node.tag)
-                t_end = time.time()-1  # to cancel the sleep time
-                iter += 1
+                # print(current_node.row, current_node.col)
+                # if current_node.tag == "Terminal":
+                #     print("DONE")
+                #     time.sleep(1)
+                # print(current_node.tag)
                 # debug
+
+                t_end = time.time()  # to cancel the sleep time
+
+            iter += 1
+            print(iter)
 
     def show_results(self):
         pass
