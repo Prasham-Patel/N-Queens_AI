@@ -12,7 +12,7 @@ class CSV_:
     def __init__(self, path):
         self.CSVfilePath = path
 
-    def creatCSV_board(self, board, cost, file_address='E:\Study\Sem 2\Artificial Intelligence\Project3\\Gridworld.csv'):
+    def creatCSV_board(self, board, cost, file_address=''):
         # default file address
         if len(file_address) == 0:
             file_address = self.CSVfilePath
@@ -22,7 +22,7 @@ class CSV_:
             write.writerow([cost])
         CSVfile.close()
 
-    def readCSV_board(self, file_address='E:\Study\Sem 2\Artificial Intelligence\Project3\\Gridworld.csv'):
+    def readCSV_board(self, file_address=''):
 
         # default file address
         if len(file_address) == 0:
@@ -182,7 +182,7 @@ class Node:
 
 class world:
 
-    def __init__(self, file, reward_per_action, gamma, time_to_learn, prob_of_moving):
+    def __init__(self, file, reward_per_action, gamma, time_to_learn, prob_of_moving, policyNo):
         self.file = file
         self.reward_per_action = reward_per_action
         self.gamma = gamma
@@ -192,6 +192,14 @@ class world:
         self.min_count = 5
         self.barrier = []
         self.start = []
+        self.totalReward = 0
+        self.iter = 0
+        self.meanRewardMatrix = []
+        self.iterMatrix = []
+        self.timeMatrix = []
+        self.epsilon = 0.2
+        self.currentTime = 0
+        self.policyNo = policyNo
 
     def get_grid(self):
         csv_ = CSV_(self.file)
@@ -222,7 +230,7 @@ class world:
         #     for j in range(m):
         #         grid[i][j] = Node((i, j))
 
-        a = 3# n * m / 10
+        a = 3#n * m / 10
         p_terminal = random.randint(1, int(a))
         n_terminal = random.randint(1, int(a))
         barrier = random.randint(1, int(a))
@@ -341,31 +349,63 @@ class world:
 
         return current_position
 
+    def policy(self, current_node):
+        if self.policyNo == 1:
+            action = self.policy_Epsilon_greedy(current_node)
+        elif self.policyNo == 2:
+            action = self.policy_counter(current_node)
+        elif self.policyNo == 3:
+            action = self.policy_part3(current_node)
+        else:
+            action = self.policy_random()
+
+        return action
+
+
+    def policy_part3(self, current_node):
+        e = len(self.grid)*len(self.grid[0])/1000
+        if e > 1:
+            e = 1
+        self.epsilon = (e/self.time_to_learn)*(self.time_to_learn - self.currentTime)
+
+        return self.policy_Epsilon_greedy(current_node)
+
     def policy_random(self):
         actions = ["up", "down", "right", "left"]
         action = np.random.choice(actions)
         return action
 
-    def policy_Epsilon_greedy(self, eps, current_node):
+    def policy_Epsilon_greedy(self, current_node):
         p = np.random.random()
-        if p <= eps:
+        if p <= self.epsilon:
             return self.policy_random()
-        elif p > eps:
+        elif p > self.epsilon:
             return current_node.get_max_action()
 
     def policy_counter(self, current_node):
         actions = ["up", "down", "right", "left"]
-        eps = 0.1
         new_actions = []
         for action in actions:
             if current_node.get_count(action) < self.min_count:
                 new_actions.append(action)
         if len(new_actions) == 0:
-            return self.policy_Epsilon_greedy(eps, current_node)
+            return self.policy_Epsilon_greedy(current_node)
         else:
             return np.random.choice(new_actions)
 
-    def direction_map(self, title = "direction map"):
+    def mean_reward(self):
+        mean = self.totalReward/self.iter
+        self.meanRewardMatrix.append(mean)
+
+    def plotReward(self):
+        fig = plt.figure()
+        # plt.plot_date(x=self.timeMatrix, y=self.meanRewardMatrix, xdate=False, ydate=False)
+        plt.plot(self.timeMatrix, self.meanRewardMatrix)
+        plt.xlabel('Time (s)')
+        plt.ylabel('Mean Reward')
+        plt.show()
+
+    def heat_map(self, title = "Heat map"):
         # Visualization of the found path using matplotlib
         fig, ax = plt.subplots(1)
         ax.margins()
@@ -400,8 +440,6 @@ class world:
         plt.axis('scaled')
         plt.gca().invert_yaxis()
         plt.show()
-
-    # def heat_map (self, title = "")
 
     def Q_learning(self):
         t_init = time.time()
@@ -458,15 +496,17 @@ class world:
         while t_end - t_init <= self.time_to_learn:
             # restart from the start position
             current_node = self.node_World[self.start[0]][self.start[1]]
-            action = self.policy_counter(current_node)  # Exploration policy of the agent
-            current_node.counter_update(action)
+            action = self.policy(current_node)  # Exploration policy of the agent
+            # action = self.policy_Epsilon_greedy(current_node)
+            # current_node.counter_update(action)
             current_node.total_counter_update(self.iter)
             new_pos = self.takeAction([current_node.row, current_node.col], action)  # the action that agent actually took
             first = True
             while first or (not abs(current_node.terminal) > 0 and t_end - t_init <= self.time_to_learn):
                 # new node after the action we took
                 new_node = self.node_World[new_pos[0]][new_pos[1]]
-                new_action = self.policy_counter(new_node)
+                new_action = self.policy(new_node)
+                # new_action = self.policy_Epsilon_greedy(new_node)
                 # new_node.counter_update(new_action)
 
                 #   Return max expected pay off for new state
@@ -482,6 +522,7 @@ class world:
                     reward = self.reward_per_action
 
                 update_value = Q_s_a + self.alpha * (reward + (self.gamma * Q_ns_na) - Q_s_a)
+                self.totalReward += update_value
 
                 # update step
 
@@ -505,7 +546,12 @@ class world:
                 t_end = time.time()  # to cancel the sleep time
 
             self.iter += 1
-            # print(iter)
+            self.iterMatrix.append(self.iter)
+            self.currentTime = float(t_end - t_init)
+            self.timeMatrix.append(self.currentTime)
+            self.mean_reward()
+
+
 
 if __name__ == '__main__':
 
@@ -518,15 +564,19 @@ if __name__ == '__main__':
         gamma = float(sys.argv[3])
         time_to_learn = float(sys.argv[4])
         prob_of_moving = float(sys.argv[5])
+        # Policy 0 is random, 1 in epsilon greedy
+        # 3rd is the policy with dynamic epsilon which updates according to the grid size and time elasped
+        policy = 3
 
         print("This program will read in", file)
         print("It will run for", time_to_learn, "seconds")
         print("Its decay rate is", gamma, "and the reward per action is", reward_per_action)
         print("Its transition model will move the agent properly with p =", prob_of_moving)
 
-        grid_world = world(file, reward_per_action, gamma, time_to_learn, prob_of_moving)
-        # grid_world.get_grid()
-        grid_world.random_grid(40, 40)
+        grid_world = world(file, reward_per_action, gamma, time_to_learn, prob_of_moving, policy)
+        grid_world.get_grid()
+        # grid_world.random_grid(20, 20)
         grid_world.SARSA()
-        grid_world.direction_map()
+        grid_world.heat_map()
+        grid_world.plotReward()
         # print(grid_world.grid)
