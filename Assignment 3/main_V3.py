@@ -142,14 +142,14 @@ class Node:
             state = self.terminal
         return x, y, state
 
-    def avg_timeOnNode(self, total_iter):
+    def avg_timeOnNode(self, total_iter, total_grid_value = 1):
         # counter = self.counter_up + self.counter_down + self.counter_left + self.counter_right
         # print("counter = ", self.counter)
         # print("total iter = ", total_iter)
         # print("__________________")
 
-        return int(self.counter*100/total_iter)
-
+        x = (self.counter*100/(total_grid_value*total_iter))
+        return int(x)
     def counter_update(self, action):
         if action == "up":
             self.counter_up += 1
@@ -406,10 +406,16 @@ class world:
         # Draw map
         row = len(self.node_World)  # map size
         col = len(self.node_World[0])  # map size
+        total_grid_value = 0
+        for i in range(row):
+            for j in range(col):
+                if self.node_World[i][j].tag is None :
+                    total_grid_value += self.node_World[i][j].avg_timeOnNode(self.iter)
+
         for i in range(row):
             for j in range(col):
                 x, y, state = self.node_World[i][j].get_print_action()
-                avg_time = self.node_World[i][j].avg_timeOnNode(self.iter)
+                avg_time = self.node_World[i][j].avg_timeOnNode(self.iter, (total_grid_value/100))
                 if state == "BARRIER":
                     ax.add_patch(Rectangle((j - 0.5, i - 0.5), 1, 1, edgecolor='k', facecolor='k'))  # free space
                 elif state == "START":
