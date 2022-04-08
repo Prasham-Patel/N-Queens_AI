@@ -2,7 +2,7 @@
 
 ## Input arguments
 
-  There are total six input arguments:
+  There are total **7** input arguments:
   - **Filename**: address of the file containig grid 
   - **Reward**: reward given to agent per movment
   - **Gamma**: the discount factor for learning 
