@@ -192,6 +192,8 @@ class world:
         self.min_count = 5
         self.barrier = []
         self.start = []
+        self.hole = []
+        self.hole_list = []
         self.totalReward = 0
         self.iter = 0
         self.meanRewardMatrix = []
@@ -214,12 +216,17 @@ class world:
                 elif "S" == e:
                     self.start =[i,j]
                     self.node_World[i][j].tag = "START"
+                elif e.isalpha() == True and e not in ['X','S']:
+                    self.hole =[i,j]
+                    self.hole_list.append([i,j])
+                    self.node_World[i][j].tag = "HOLE"
                 elif abs(int(e)) > 0:
                     self.node_World[i][j].terminal = int(e)
                     self.node_World[i][j].tag = "Terminal"
 
-        print("BARRIER: ", self.barrier)
-        print("START: ", self.start)
+        # print("BARRIER: ", self.barrier)
+        # print("START: ", self.start)
+        # print("WormHole: ", self.hole)
 
     def random_grid(self, n, m):
         grid = [[Node(row, col) for col in range(m)] for row in range(n)]
@@ -279,6 +286,7 @@ class world:
 
     def takeAction(self, current_position, direction):
         obstacle= self.barrier
+        hole = self.hole
         grid_row_size = len(self.grid)
         grid_col_size = len(self.grid[0])
         new_position = copy.deepcopy(current_position)
@@ -312,35 +320,60 @@ class world:
             barrier = new_position in obstacle or new_position[0] < 0 or new_position[0] >= grid_row_size or \
                       new_position[1] < 0 or new_position[1] >= grid_col_size
             if not barrier:
-                current_position = copy.deepcopy(new_position)
-                new_position[0] += -1
+                if new_position in hole:
+                    current_position = random.choice(self.hole_list)
+                    while  current_position == new_position:
+                        current_position = random.choice(self.hole_list)   
+                else :
+                    current_position = copy.deepcopy(new_position)
+                    new_position[0] += -1
         elif action == '2down':
             new_position[0] += 1
             barrier = new_position in obstacle or new_position[0] < 0 or new_position[0] >= grid_row_size or \
                       new_position[1] < 0 or new_position[1] >= grid_col_size
             if not barrier:
-                current_position = copy.deepcopy(new_position)
-                new_position[0] += 1
+                if new_position in hole:
+                    current_position = random.choice(self.hole_list)
+                    while  current_position == new_position:
+                        current_position = random.choice(self.hole_list)
+                else :
+                    current_position = copy.deepcopy(new_position)
+                    new_position[0] += 1
         elif action == '2right':
             new_position[1] += 1
             barrier = new_position in obstacle or new_position[0] < 0 or new_position[0] >= grid_row_size or \
                       new_position[1] < 0 or new_position[1] >= grid_col_size
             if not barrier:
-                current_position = copy.deepcopy(new_position)
-                new_position[1] += 1
+                if new_position in hole:
+                    current_position = random.choice(self.hole_list)
+                    while  current_position == new_position:
+                        current_position = random.choice(self.hole_list)
+                else :
+                    current_position = copy.deepcopy(new_position)
+                    new_position[1] += 1
         elif action == '2left':
             new_position[1] += -1
             barrier = new_position in obstacle or new_position[0] < 0 or new_position[0] >= grid_row_size or \
                       new_position[1] < 0 or new_position[1] >= grid_col_size
             if not barrier:
-                current_position = copy.deepcopy(new_position)
-                new_position[1] += -1
+                if new_position in hole:
+                    current_position = random.choice(self.hole_list)
+                    while  current_position == new_position:
+                        current_position = random.choice(self.hole_list)
+                else :
+                    current_position = copy.deepcopy(new_position)
+                    new_position[1] += -1
 
-        # barrier check for single move actions
+        # barrier and wormhole check for single move actions
         barrier = new_position in obstacle or new_position[0] < 0 or new_position[0] >= grid_row_size \
                   or new_position[1] < 0 or new_position[1] >= grid_col_size
         if not barrier:
-            current_position = new_position
+            if new_position in hole:
+                    current_position = random.choice(self.hole_list)
+                    while  current_position == new_position:
+                        current_position = random.choice(self.hole_list)
+            else :
+                current_position = new_position
 
         return current_position
 
@@ -351,10 +384,81 @@ class world:
             action = self.policy_counter(current_node)
         elif self.policyNo == 3:
             action = self.policy_part3(current_node)
+        elif self.policyNo == 4:
+            action = self.custom_policy(current_node)
         else:
             action = self.policy_random()
 
         return action
+##-----------------------------------------------------------------------------------------
+    # def custom_policy(self,current_node):
+    #     row = len(self.grid)
+    #     col = len(self.grid[0])
+
+    #     if (1 <= int(row*col) and 100 > int(row*col) ):
+    #         if self.time_to_learn > 2:
+    #             self.epsilon = 0.2
+    #         elif self.time_to_learn < 2 and self.time_to_learn > 1:
+    #             self.epsilon = 0.5
+    #         elif self.time_to_learn < 0.25:
+    #             self.epsilon = 1
+    #         else:
+    #             self.epsilon = 0.8
+            
+    #         return self.policy_Epsilon_greedy(current_node)
+
+    #     elif (100 <= int(row*col) and 400 > int(row*col) ):
+    #         if self.time_to_learn > 8:
+    #             self.epsilon = 0.2
+    #         elif self.time_to_learn < 3 and self.time_to_learn > 8:
+    #             self.epsilon = 0.5
+    #         elif self.time_to_learn < 2:
+    #             self.epsilon = 1
+    #         else:
+    #             self.epsilon = 0.8
+            
+    #         return self.policy_Epsilon_greedy(current_node)
+
+    #     elif (400 <= int(row*col) and 900 > int(row*col) ):
+            
+    #         if self.time_to_learn > 14:
+    #             self.epsilon = 0.2
+    #         elif self.time_to_learn < 5 and self.time_to_learn > 14:
+    #             self.epsilon = 0.5
+    #         elif self.time_to_learn < 4:
+    #             self.epsilon = 1
+    #         else:
+    #             self.epsilon = 0.8
+            
+    #         return self.policy_Epsilon_greedy(current_node) 
+
+    #     elif (900 <= int(row*col) and 1600 > int(row*col) ):
+    #         if self.time_to_learn > 18:
+    #             self.epsilon = 0.2
+    #         elif self.time_to_learn < 8 and self.time_to_learn > 18:
+    #             self.epsilon = 0.5
+    #         elif self.time_to_learn < 5:
+    #             self.epsilon = 1
+    #         else:
+    #             self.epsilon = 0.8
+            
+    #         return self.policy_Epsilon_greedy(current_node)     
+        
+    #     elif (1600 <= int(row*col) and 2500 > int(row*col) ):
+    #         if self.time_to_learn > 20:
+    #             self.epsilon = 0.2
+    #         elif self.time_to_learn < 8 and self.time_to_learn > 20:
+    #             self.epsilon = 0.5
+    #         elif self.time_to_learn < 5:
+    #             self.epsilon = 1
+    #         else:
+    #             self.epsilon = 0.8
+            
+    #         return self.policy_Epsilon_greedy(current_node)  
+        
+    #     else: 
+    #         self.epsilon = 1
+    #         return self.policy_Epsilon_greedy(current_node)
 
     def policy_part3(self, current_node):
         e = len(self.grid)*len(self.grid[0])/1000
@@ -562,31 +666,49 @@ class world:
 
 if __name__ == '__main__':
 
-    if len(sys.argv) != 8:
-        print("Format: main.py <filename> <reward> <gamma> <time to learn> <movement probability> <policy> <learning Algorithm>")
-        exit(1)
-    else:
-        file = sys.argv[1]
-        reward_per_action = float(sys.argv[2])
-        gamma = float(sys.argv[3])
-        time_to_learn = float(sys.argv[4])
-        prob_of_moving = float(sys.argv[5])
+    # if len(sys.argv) != 8:
+    #     print("Format: main.py <filename> <reward> <gamma> <time to learn> <movement probability> <policy> <learning Algorithm>")
+    #     exit(1)
+    # else:
+    #     file = sys.argv[1]
+    #     reward_per_action = float(sys.argv[2])
+    #     gamma = float(sys.argv[3])
+    #     time_to_learn = float(sys.argv[4])
+    #     prob_of_moving = float(sys.argv[5])
 
-        # Policy 0 is random, 1 in epsilon greedy, 2 is number of times visited based policy
-        # 3rd is the policy with dynamic epsilon which updates according to the grid size and time elasped
-        policy = int(sys.argv[6])
+    #     # Policy 0 is random, 1 in epsilon greedy, 2 is number of times visited based policy
+    #     # 3rd is the policy with dynamic epsilon which updates according to the grid size and time elasped
+    #     policy = int(sys.argv[6])
 
-        # SARSA or Q_learning
-        learning_Algo = sys.argv[7]
+    #     # SARSA or Q_learning
+    #     learning_Algo = sys.argv[7]
 
-        print("This program will read in", file)
-        print("It will run for", time_to_learn, "seconds")
-        print("Its decay rate is", gamma, "and the reward per action is", reward_per_action)
-        print("Its transition model will move the agent properly with p =", prob_of_moving)
+    #     print("This program will read in", file)
+    #     print("It will run for", time_to_learn, "seconds")
+    #     print("Its decay rate is", gamma, "and the reward per action is", reward_per_action)
+    #     print("Its transition model will move the agent properly with p =", prob_of_moving)
 
-        grid_world = world(file, reward_per_action, gamma, time_to_learn, prob_of_moving, policy)
+        ## Extra policy -----------------------------------------------------------------------------------
+        ## Notes :
+        # Policy 4 --> custom policy 
+        # 
+        polysee = 2 # random policy 
+        reward = -0.04
+        gamma = 0.9 
+        p = 0.7 #movement probability 
+
+        learning_Algo = "SARSA" 
+        file_name = "C:/WPI/Spring 22/AI/N-Queens_AI/Assignment 3/new_grid.csv"
+
+        # row, col = random.randint(3,50), random.randint(3,50)
+        time_rand  = round(random.uniform(0.1, 20), 2)
+        
+        grid_world = world(file_name, reward, gamma, 25, p, polysee)
         grid_world.get_grid()
-        # grid_world.random_grid(20, 20)
+        
+
+        # grid_world.random_grid(row,col)
+
         if learning_Algo == "SARSA":
             grid_world.SARSA()
         elif learning_Algo == "Q_learning":
