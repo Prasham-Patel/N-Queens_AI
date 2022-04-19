@@ -68,6 +68,7 @@ class world:
         self.col_length = int((2*V_lim)/step)
         self.epsilon = 0.1
 
+        # GRID
         self.states = [[Node((i*step) - P_lim, (j*step) - V_lim) for j in range(self.col_length)] for i in range(self.row_length)]
 
     def simulation_setup(self, time_step, force, mass):
@@ -94,6 +95,7 @@ class world:
         else:
             return True
 
+# MOTION MODEL
     def motion(self, control_force):
         total_force = self.force + control_force
         # print(total_force)
@@ -122,6 +124,8 @@ class world:
             self.current_pos = current_node.pos
             self.current_vel = current_node.vel
             print(current_node.pos, current_node.vel)
+
+            # RATE OF CHANGE OF ERROR
             prev_error_p = self.target.pos - self.current_pos
             prev_error_v = self.target.vel - self.current_vel
             while not current_node == self.target and not current_node == None and t_end - t_init <= 30:
@@ -135,6 +139,8 @@ class world:
                 self.motion(force)  # take action step
                 print(self.current_pos, self.current_vel)
                 # exit(1)
+
+                # AGENT MUST BE INSIDE THE POS AND VEL LIMIT
                 if not self.check_lim(self.current_pos, self.current_vel):
                     reward = -10
                     Q_ns_na = 0
@@ -144,10 +150,13 @@ class world:
                 elif self.check_lim(self.current_pos, self.current_vel):
                     i, j = self.get_co_ordinates(self.current_pos, self.current_vel)
                     new_state = self.states[i][j]   # to do: must be within limit, will  give error if not
+
+                    # error term
                     error_p = self.target.pos - self.current_pos
                     error_v = self.target.vel - self.current_vel
                     # if prev_error_p-error_p > 0;
                     #     reward = 0.5
+                    # REWARD
                     reward = 1*np.sign(abs(prev_error_p) - abs(error_p)) + 0.1*np.sign(abs(prev_error_v) - abs(error_v))
                     if not np.sign(prev_error_p) == np.sign(error_p):
                         reward += -10
@@ -161,81 +170,79 @@ class world:
                     else:
                         reward += -0.1
 
-                # print(reward)
+                # UPDATE STEP
                 update_value = Q_s_a + self.alpha*(reward + (self.gamma*Q_ns_na) - Q_s_a)
-                # print("new", update_value)
                 current_node.update_Q_value(update_value, action)
-                # print(current_node.Q_value_positive_force, current_node.Q_value_negative_force)
                 current_node = new_state
                 prev_error_v = error_v
                 prev_error_p = error_p
                 reward = 0
                 t_end = time.time()  # to cancel the sleep time
-                # if iter > 3:
-                #     exit(1)
             print(self.current_pos, self.current_vel)
 
             iter += 1
 
         print("DONE")
-        time.sleep(5)
-        path = []
-        current_node = self.start
-        self.current_pos = self.start.pos
-        self.current_vel = self.start.vel
-        while not current_node == self.target:
-            path.append(current_node.pos)
-            action = current_node.get_max_action()
-            print(action)
-            force = current_node.get_force(action)
 
-            # print(force)
-            self.motion(force)  # take action step
-            print(self.current_pos, self.current_vel)
-            # exit(1)
-            if not self.check_lim(self.current_pos, self.current_vel):
-                reward = -10
-                Q_ns_na = 0
-                Q_s_a = current_node.get_Q_value(action)
-                new_state = None
-
-            elif self.check_lim(self.current_pos, self.current_vel):
-                i, j = self.get_co_ordinates(self.current_pos, self.current_vel)
-                new_state = self.states[i][j]  # to do: must be within limit, will  give error if not
-                error_p = self.target.pos - self.current_pos
-                error_v = self.target.vel - self.current_vel
-                # if prev_error_p-error_p > 0;
-                #     reward = 0.5
-                reward = 1 * np.sign(abs(prev_error_p) - abs(error_p)) + 0.1 * np.sign(abs(prev_error_v) - abs(error_v))
-                if not np.sign(prev_error_p) == np.sign(error_p):
-                    reward += -10
-                Q_ns_na = max([new_state.get_Q_value("positive"), new_state.get_Q_value("negative")])
-                Q_s_a = current_node.get_Q_value(action)
-
-                if new_state == self.target:
-                    reward += 5
-                    print("____________________________DONE___________________________")
-                    time.sleep(3)
-                    break
-                else:
-                    reward += -0.1
-
-            # print(reward)
-            update_value = Q_s_a + self.alpha * (reward + (self.gamma * Q_ns_na) - Q_s_a)
-            # print("new", update_value)
-            current_node.update_Q_value(update_value, action)
-            # print(current_node.Q_value_positive_force, current_node.Q_value_negative_force)
-            current_node = new_state
-            prev_error_v = error_v
-            prev_error_p = error_p
-            reward = 0
-
-        print(len(path))
-        y = []
-        for i in range(len(path)):
-            y.append(i)
-        plt.scatter(y, path)
-        plt.show()
+        # TESTING LOOP
+        # time.sleep(5)
+        # path = []
+        # current_node = self.start
+        # self.current_pos = self.start.pos
+        # self.current_vel = self.start.vel
+        # while not current_node == self.target:
+        #     path.append(current_node.pos)
+        #     action = current_node.get_max_action()
+        #     print(action)
+        #     force = current_node.get_force(action)
+        #
+        #     # print(force)
+        #     self.motion(force)  # take action step
+        #     print(self.current_pos, self.current_vel)
+        #     # exit(1)
+        #     if not self.check_lim(self.current_pos, self.current_vel):
+        #         reward = -10
+        #         Q_ns_na = 0
+        #         Q_s_a = current_node.get_Q_value(action)
+        #         new_state = None
+        #
+        #     elif self.check_lim(self.current_pos, self.current_vel):
+        #         i, j = self.get_co_ordinates(self.current_pos, self.current_vel)
+        #         new_state = self.states[i][j]  # to do: must be within limit, will  give error if not
+        #         error_p = self.target.pos - self.current_pos
+        #         error_v = self.target.vel - self.current_vel
+        #         # if prev_error_p-error_p > 0;
+        #         #     reward = 0.5
+        #         reward = 1 * np.sign(abs(prev_error_p) - abs(error_p)) + 0.1 * np.sign(abs(prev_error_v) - abs(error_v))
+        #         if not np.sign(prev_error_p) == np.sign(error_p):
+        #             reward += -10
+        #         Q_ns_na = max([new_state.get_Q_value("positive"), new_state.get_Q_value("negative")])
+        #         Q_s_a = current_node.get_Q_value(action)
+        #
+        #         if new_state == self.target:
+        #             reward += 5
+        #             print("____________________________DONE___________________________")
+        #             time.sleep(3)
+        #             break
+        #         else:
+        #             reward += -0.1
+        #
+        #     # print(reward)
+        #     update_value = Q_s_a + self.alpha * (reward + (self.gamma * Q_ns_na) - Q_s_a)
+        #     # print("new", update_value)
+        #     current_node.update_Q_value(update_value, action)
+        #     # print(current_node.Q_value_positive_force, current_node.Q_value_negative_force)
+        #     current_node = new_state
+        #     prev_error_v = error_v
+        #     prev_error_p = error_p
+        #     reward = 0
+        #
+        # print(len(path))
+        # y = []
+        # for i in range(len(path)):
+        #     y.append(i)
+        # plt.scatter(y, path)
+        # plt.show()
 
 
 if __name__ == '__main__':
