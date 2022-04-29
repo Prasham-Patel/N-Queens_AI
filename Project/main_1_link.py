@@ -6,8 +6,19 @@ import time
 import sys
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
+import matplotlib.animation as animation
 from WPI_AI.Project.Python.ODE import one_link
 from math import pi
+
+def get_coords(th):
+    """Return the (x, y) coordinates of the bob at angle th."""
+    return 1 * np.cos(th), 1 * np.sin(th)
+
+def animate(i):
+    """Update the animation at frame i."""
+    x, y = get_coords(path[i].pos)
+    line.set_data([0, x], [0, y])
+    circle.set_center((x, y))
 
 class Node():
 
@@ -50,15 +61,19 @@ class Node():
             delta_Q = self.Q_value_positive_force-self.prev_Q_value_positive_force
             if delta_Q == 0:
                 return 1
+            elif delta_Q < 0:
+                return 0
             elif not delta_Q == 0:
-                return self.alpha * (delta_Q)
+                return 1+self.alpha * (delta_Q)
         if direction == "negative":
             delta_Q = self.Q_value_negative_force - self.prev_Q_value_negative_force
             if delta_Q == 0:
                 return -1
+            elif delta_Q > 0:
+                return 0
             elif not delta_Q == 0:
 
-                return self.alpha * (delta_Q)
+                return -1-self.alpha * (delta_Q)
 
 class world:
 
@@ -66,8 +81,8 @@ class world:
         self.P_lim = P_lim
         self.V_lim = V_lim
         self.step = step
-        self.row_length = int((2*P_lim)/step)
-        self.col_length = int((2*V_lim)/step)
+        self.row_length = int(((2*P_lim)/step)+1)
+        self.col_length = int(((2*V_lim)/step)+1)
         self.epsilon = 0.1
 
         # GRID
@@ -95,7 +110,9 @@ class world:
         self.target = self.states[i][j]
 
     def check_lim(self, pos, vel):
-        if abs(pos) > self.P_lim or abs(vel) > self.V_lim:
+        print("lim check", abs(pos), self.P_lim)
+        if abs(pos) >= self.P_lim or abs(vel) >= self.V_lim:
+
             return False
         else:
             return True
@@ -113,6 +130,197 @@ class world:
             return random.choice(["positive", "negative"])
         elif p > self.epsilon:
             return current_node.get_max_action()
+
+    def Q_learning(self):
+        self.alpha = 0.2
+        self.gamma = 0.9
+
+        t_init = time.time()
+        t_end = time.time()
+        iter = 0
+
+        while t_end - t_init <= 60:
+            print(iter)
+            current_node = self.start
+            self.current_pos = current_node.pos
+            self.current_vel = current_node.vel
+            print(current_node.pos, current_node.vel)
+
+            # RATE OF CHANGE OF ERROR
+            prev_error_p = self.target.pos - self.current_pos
+            prev_error_v = self.target.vel - self.current_vel
+            t_new = time.time()
+            while not current_node == self.target and not current_node == None and t_end - t_init <= 60:
+
+                action = self.policy_Epsilon_greedy(current_node)
+                print(action)
+                force = current_node.get_force(action)
+
+                print("force", force)
+                self.motion(force)  # take action step
+                # print(self.current_pos, self.current_vel)
+
+                i, j = self.get_co_ordinates(self.current_pos, self.current_vel)
+                # print(i, j)
+                if abs(i) >= int((self.row_length) ) or abs(j) >= int(self.col_length) or i < 0 or j < 0:
+                    reward = -10
+                    Q_ns_na = 0
+                    Q_s_a = current_node.get_Q_value(action)
+                    new_state = None
+
+                    # error term
+                    error_p = self.target.pos - self.current_pos
+                    error_v = self.target.vel - self.current_vel
+
+                    # UPDATE STEP
+                    # print(reward)
+                    update_value = Q_s_a + self.alpha * (reward + (self.gamma * Q_ns_na) - Q_s_a)
+                    current_node.update_Q_value(update_value, action)
+                    current_node = new_state
+                    prev_error_v = error_v
+                    prev_error_p = error_p
+                    reward = 0  # reset reward for next step
+                    t_end = time.time()  # to cancel the sleep time
+
+                else:
+                    new_state = self.states[i][j]  # to do: must be within limit, will  give error if not
+
+                    # error term
+                    error_p = self.target.pos - self.current_pos
+                    error_v = self.target.vel - self.current_vel
+
+                    # REWARD
+                    reward = 1 * np.sign(abs(prev_error_p) - abs(error_p)) + 0.1 * np.sign(
+                        abs(prev_error_v) - abs(error_v))
+                    # over shoot reward
+                    if not np.sign(prev_error_p) == np.sign(error_p):
+                        reward += -5
+
+                    Q_ns_na = max([new_state.get_Q_value("positive"), new_state.get_Q_value("negative")])
+                    Q_s_a = current_node.get_Q_value(action)
+
+                    if new_state == self.target:
+                        # target reach reward
+                        reward += 5
+                        print("____________________________DONE___________________________")
+                        # time.sleep(2)
+                    elif reward <= 0:
+                        reward += -0.1
+
+                    # UPDATE STEP
+                    # print(reward)
+                    update_value = Q_s_a + self.alpha * (reward + (self.gamma * Q_ns_na) - Q_s_a)
+                    print("update value", update_value)
+                    current_node.update_Q_value(update_value, action)
+                    current_node = new_state
+                    prev_error_v = error_v
+                    prev_error_p = error_p
+                    reward = 0
+                    t_end = time.time()  # to cancel the sleep time
+
+                print(self.current_pos, self.current_vel)
+
+            iter += 1
+            # if iter == 100:
+            #     exit(1)
+            print("???????????????????????????????step?????????????????????????????")
+            print(iter)
+            # if iter > 100:
+            #     break
+
+        # testing loop
+        path = []
+        current_node = self.start
+        self.current_pos = current_node.pos
+        self.current_vel = current_node.vel
+        print(current_node.pos, current_node.vel)
+
+        # RATE OF CHANGE OF ERROR
+        prev_error_p = self.target.pos - self.current_pos
+        prev_error_v = self.target.vel - self.current_vel
+        t_new = time.time()
+        while not current_node == self.target and not current_node == None and t_end - t_init <= 360:
+            path.append(current_node)
+            action = current_node.get_max_action()
+            print(action)
+            force = current_node.get_force(action)
+
+            print("force", force)
+            self.motion(force)  # take action step
+            # print(self.current_pos, self.current_vel)
+
+            i, j = self.get_co_ordinates(self.current_pos, self.current_vel)
+            # print(i, j)
+            if abs(i) >= int((self.row_length) ) or abs(j) >= int(self.col_length) or i < 0 or j < 0:
+                reward = -10
+                Q_ns_na = 0
+                Q_s_a = current_node.get_Q_value(action)
+                new_state = None
+
+                # error term
+                error_p = self.target.pos - self.current_pos
+                error_v = self.target.vel - self.current_vel
+
+                # UPDATE STEP
+                # print(reward)
+                update_value = Q_s_a + self.alpha * (reward + (self.gamma * Q_ns_na) - Q_s_a)
+                current_node.update_Q_value(update_value, action)
+                current_node = new_state
+                prev_error_v = error_v
+                prev_error_p = error_p
+                reward = 0  # reset reward for next step
+                t_end = time.time()  # to cancel the sleep time
+
+            else:
+                new_state = self.states[i][j]  # to do: must be within limit, will  give error if not
+
+                # error term
+                error_p = self.target.pos - self.current_pos
+                error_v = self.target.vel - self.current_vel
+
+                # REWARD
+                reward = 1 * np.sign(abs(prev_error_p) - abs(error_p)) + 0.1 * np.sign(
+                    abs(prev_error_v) - abs(error_v))
+                if not np.sign(prev_error_p) == np.sign(error_p):
+                    reward += -2
+                Q_ns_na = max([new_state.get_Q_value("positive"), new_state.get_Q_value("negative")])
+                Q_s_a = current_node.get_Q_value(action)
+
+                if new_state == self.target:
+                    reward += 5
+                    print("____________________________DONE___________________________")
+                    # time.sleep(2)
+                elif reward <= 0:
+                    reward += -0.1
+
+                # UPDATE STEP
+                # print(reward)
+                update_value = Q_s_a + self.alpha * (reward + (self.gamma * Q_ns_na) - Q_s_a)
+                print("update value", update_value)
+                current_node.update_Q_value(update_value, action)
+                current_node = new_state
+                prev_error_v = error_v
+                prev_error_p = error_p
+                reward = 0
+                t_end = time.time()  # to cancel the sleep time
+
+            print(self.current_pos, self.current_vel)
+
+        iter += 1
+        # if iter == 100:
+        #     exit(1)
+        print("???????????????????????????????step?????????????????????????????")
+        print(iter)
+
+        # print(len(path))
+        # y = []
+        # for i in range(len(path)):
+        #     y.append(i)
+
+
+        # plt.scatter(y, path)
+        # plt.show()
+        return path
 
     def learning(self):
         self.alpha = 0.2
@@ -145,7 +353,15 @@ class world:
                 # exit(1)
 
                 # AGENT MUST BE INSIDE THE POS AND VEL LIMIT
+                i, j = self.get_co_ordinates(self.current_pos, self.current_vel)
+
                 if not self.check_lim(self.current_pos, self.current_vel):
+                    reward = -10
+                    Q_ns_na = 0
+                    Q_s_a = current_node.get_Q_value(action)
+                    new_state = None
+
+                elif abs(i) <= int((self.row_length - 1) / 2) or abs(j) >= int((self.col_length - 1) / 2):
                     reward = -10
                     Q_ns_na = 0
                     Q_s_a = current_node.get_Q_value(action)
@@ -155,24 +371,24 @@ class world:
                     i, j = self.get_co_ordinates(self.current_pos, self.current_vel)
                     new_state = self.states[i][j]   # to do: must be within limit, will  give error if not
 
-                    # error term
-                    error_p = self.target.pos - self.current_pos
-                    error_v = self.target.vel - self.current_vel
-                    # if prev_error_p-error_p > 0;
-                    #     reward = 0.5
-                    # REWARD
-                    reward = 1*np.sign(abs(prev_error_p) - abs(error_p)) + 0.1*np.sign(abs(prev_error_v) - abs(error_v))
-                    if not np.sign(prev_error_p) == np.sign(error_p):
-                        reward += -10
-                    Q_ns_na = max([new_state.get_Q_value("positive"), new_state.get_Q_value("negative")])
-                    Q_s_a = current_node.get_Q_value(action)
+                # error term
+                error_p = self.target.pos - self.current_pos
+                error_v = self.target.vel - self.current_vel
+                # if prev_error_p-error_p > 0;
+                #     reward = 0.5
+                # REWARD
+                reward = 1*np.sign(abs(prev_error_p) - abs(error_p)) + 0.1*np.sign(abs(prev_error_v) - abs(error_v))
+                if not np.sign(prev_error_p) == np.sign(error_p):
+                    reward += -10
+                Q_ns_na = max([new_state.get_Q_value("positive"), new_state.get_Q_value("negative")])
+                Q_s_a = current_node.get_Q_value(action)
 
-                    if new_state == self.target:
-                        reward += 5
-                        print("____________________________DONE___________________________")
-                        # time.sleep(3)
-                    else:
-                        reward += -0.1
+                if new_state == self.target:
+                    reward += 5
+                    print("____________________________DONE___________________________")
+                    # time.sleep(3)
+                else:
+                    reward += -0.1
 
                 # UPDATE STEP
                 # reward = -reward
@@ -254,9 +470,34 @@ class world:
 
 
 if __name__ == '__main__':
-    sim_world = world(pi, 5, 0.1)
-    sim_world.simulation_setup(0.1, 1, 0.5, 0.5)
-    sim_world.define_start_pos(-0.5, 0)
-    sim_world.define_target_pos(-pi/2, 0)
-    sim_world.learning()
+    sim_world = world(pi, 5, 0.05)
+    sim_world.simulation_setup(0.05, 0.8, 0.5, 0.5)
+    sim_world.define_start_pos(0.5, 0)
+    sim_world.define_target_pos(pi/2, 0)
+    path = sim_world.Q_learning()
+
+    L = 1
+    # Initialize the animation plot. Make the aspect ratio equal so it looks right.
+    fig = plt.figure()
+    ax = fig.add_subplot(aspect='equal')
+    theta0 = path[0].pos
+    # # The pendulum rod, in its initial position.
+    x0, y0 = get_coords(theta0)
+    line, = ax.plot([0, x0], [0, y0], lw=3, c='k')
+    # The pendulum bob: set zorder so that it is drawn over the pendulum rod.
+    bob_radius = 0.08
+    circle = ax.add_patch(plt.Circle(get_coords(theta0), bob_radius,
+                                     fc='r', zorder=3))
+    # Set the plot limits so that the pendulum has room to swing!
+    ax.set_xlim(-L * 1.2, L * 1.2)
+    ax.set_ylim(-L * 1.2, L * 1.2)
+
+    # print(len(sol.y[0]))
+    nframes = len(path)
+    interval = 1
+    ani = animation.FuncAnimation(fig, animate, frames=nframes, repeat=True,
+                                  interval=interval)
+    # # ani.save("ani")
+    # ani.save('the_movie.', writer='mencoder', fps=15)
+    plt.show()
 
