@@ -1,0 +1,789 @@
+from cmath import log10
+import time
+from typing import List, Tuple, Union
+import numpy as np
+# import pygame
+import matplotlib.animation as animation
+from math import cos, pi, sin
+import random
+import csv
+import copy
+import time
+import sys
+import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
+from math import pi
+from ODE_2_link_final import two_link
+
+
+def get_coords1(theta1):
+    """Return the (x, y) coordinates of the link 1 bob at angle theta1."""
+    return 0.1 * np.sin(theta1), 0.1 * np.cos(theta1),
+
+
+def get_coords2(theta1, theta2):
+    """Return the (x, y) coordinates of the link 2 bob at angle theta2."""
+    y = 0.1 * cos(theta1 + theta2) + 0.1 * cos(theta1)
+    x = 0.1 * sin(theta1 + theta2) + 0.1 * sin(theta1)
+    return x, y
+
+
+def animate(i):
+    """Update the animation at frame i."""
+    x1, y1 = get_coords1(path[i][0])
+    x2, y2 = get_coords2(path[i][0], path[i][1])
+    line1.set_data([0, x1], [0, y1])
+    line2.set_data([x1, x2], [y1, y2])
+    circle.set_center((x2, y2))
+
+
+class Node():
+
+    def __init__(self, theta1, theta_dot_1, theta2, theta_dot_2):
+        self.pos1 = theta1
+        self.pos2 = theta2
+        self.vel1 = theta_dot_1
+        self.vel2 = theta_dot_2
+
+        self.Q_value_positive_torque_1 = 0
+        self.Q_value_positive_torque_2 = 0
+
+        self.prev_Q_value_positive_torque_1 = 0
+        self.prev_Q_value_positive_torque_2 = 0
+
+        self.Q_value_negative_torque_1 = 0
+        self.Q_value_negative_torque_2 = 0
+
+        self.prev_Q_value_negative_torque_1 = 0
+        self.prev_Q_value_negative_torque_2 = 0
+
+        self.alpha = 5
+
+    def get_Q_value(self, action):
+        if action[0] == "positive1" and action[1] == "positive2":
+            return [self.Q_value_positive_torque_1, self.Q_value_positive_torque_2]
+        elif action[0] == "positive1" and action[1] == "negative2":
+            return [self.Q_value_positive_torque_1, self.Q_value_negative_torque_2]
+        elif action[0] == "negative1" and action[1] == "negative2":
+            return [self.Q_value_negative_torque_1, self.Q_value_negative_torque_2]
+        elif action[0] == "negative1" and action[1] == "positive2":
+            return [self.Q_value_negative_torque_1, self.Q_value_positive_torque_2]
+
+    def update_Q_value(self, update_value1, update_value2, direction1, direction2):
+        if direction1 == "positive1" and direction2 == "positive2":
+            self.prev_Q_value_positive_torque_1 = self.Q_value_positive_torque_1
+            self.prev_Q_value_positive_torque_2 = self.Q_value_positive_torque_2
+
+            self.Q_value_positive_torque_1 = update_value1
+            self.Q_value_positive_torque_2 = update_value2
+
+        elif direction1 == "positive1" and direction2 == "negative2":
+            self.prev_Q_value_positive_torque_1 = self.Q_value_positive_torque_1
+            self.prev_Q_value_negative_torque_2 = self.Q_value_negative_torque_2
+
+            self.Q_value_positive_torque_1 = update_value1
+            self.Q_value_negative_torque_2 = update_value2
+
+        elif direction1 == "negative1" and direction2 == "positive2":
+            self.prev_Q_value_negative_torque_1 = self.Q_value_negative_torque_1
+            self.prev_Q_value_positive_torque_2 = self.Q_value_positive_torque_2
+
+            self.Q_value_negative_torque_1 = update_value1
+            self.Q_value_positive_torque_2 = update_value2
+
+        elif direction1 == "negative1" and direction2 == "negative2":
+            self.prev_Q_value_negative_torque_1 = self.Q_value_negative_torque_1
+            self.prev_Q_value_negative_torque_2 = self.Q_value_negative_torque_2
+
+            self.Q_value_negative_torque_1 = update_value1
+            self.Q_value_negative_torque_2 = update_value2
+
+    def get_max_action(self):
+        actions1 = [self.Q_value_negative_torque_1, self.Q_value_positive_torque_1]
+        actions2 = [self.Q_value_negative_torque_2, self.Q_value_positive_torque_2]
+
+        action1 = max(actions1)
+        action2 = max(actions2)
+
+        index1 = actions1.index(action1)
+        index2 = actions2.index(action2)
+
+        if index1 == 1 and index2 == 1:
+            return ["positive1", "positive2"]
+        if index1 == 1 and index2 == 0:
+            return ["positive1", "negative2"]
+        if index1 == 0 and index2 == 1:
+            return ["negative1", "positive2"]
+        if index1 == 0 and index2 == 0:
+            return ["negative1", "negative2"]
+
+    def get_force(self, direction1, direction2):
+        self.positve_force = 7
+        self.negative_force = -7
+        self.link_2positve_force = 4
+        self.link_2negative_force = -4
+        if direction1 == "positive1" and direction2 == "positive2":
+            delta_Q1 = (self.Q_value_positive_torque_1 - self.prev_Q_value_positive_torque_1)
+            delta_Q2 = (self.Q_value_positive_torque_2 - self.prev_Q_value_positive_torque_2)
+
+            if delta_Q1 == 0 and delta_Q2 == 0:
+                # return [7.5, 7.5]
+                return [self.positve_force, self.link_2positve_force]
+            elif delta_Q1 == 0 and not delta_Q2 == 0:
+                return [self.positve_force, self.link_2positve_force + self.alpha * (delta_Q2/self.Q_value_positive_torque_2)]
+            elif not delta_Q1 == 0 and delta_Q2 == 0:
+                return [self.positve_force + self.alpha * (delta_Q1/self.Q_value_positive_torque_1), self.link_2positve_force]
+            elif not delta_Q1 == 0 and not delta_Q2 == 0:
+                return [self.positve_force + self.alpha * (delta_Q1/self.Q_value_positive_torque_1), self.link_2positve_force + self.alpha * (delta_Q2/self.Q_value_positive_torque_2)]
+            # return [1, 1]
+
+        elif direction1 == "positive1" and direction2 == "negative2":
+            delta_Q1 = (self.Q_value_positive_torque_1 - self.prev_Q_value_positive_torque_1)
+            delta_Q2 = (self.Q_value_negative_torque_2 - self.prev_Q_value_negative_torque_2)
+
+            if delta_Q1 == 0 and delta_Q2 == 0:
+                return [self.positve_force, self.link_2negative_force]
+            elif delta_Q1 == 0 and not delta_Q2 == 0:
+                return [self.positve_force, self.link_2negative_force - self.alpha * (delta_Q2/self.Q_value_negative_torque_2)]
+            elif not delta_Q1 == 0 and delta_Q2 == 0:
+                return [self.positve_force + self.alpha * (delta_Q1/self.Q_value_positive_torque_1), self.link_2negative_force]
+            elif not delta_Q1 == 0 and not delta_Q2 == 0:
+                # return [1,-1]
+                return [self.positve_force + self.alpha * (delta_Q1/self.Q_value_positive_torque_1), self.link_2negative_force - self.alpha * (delta_Q2/self.Q_value_negative_torque_2)]
+
+        elif direction1 == "negative1" and direction2 == "positive2":
+            delta_Q1 = (self.Q_value_negative_torque_1 - self.prev_Q_value_negative_torque_1)
+            delta_Q2 = (self.Q_value_positive_torque_2 - self.prev_Q_value_positive_torque_2)
+
+            if delta_Q1 == 0 and delta_Q2 == 0:
+                return [self.negative_force, self.link_2positve_force]
+            elif delta_Q1 == 0 and not delta_Q2 == 0:
+                return [self.negative_force, self.link_2positve_force + self.alpha * (delta_Q2/self.Q_value_positive_torque_2)]
+            elif not delta_Q1 == 0 and delta_Q2 == 0:
+                return [self.negative_force - self.alpha * (delta_Q1/self.Q_value_negative_torque_1), self.link_2positve_force]
+            elif not delta_Q1 == 0 and not delta_Q2 == 0:
+                return [self.negative_force - self.alpha * (delta_Q1/self.Q_value_negative_torque_1), self.link_2positve_force + self.alpha * (delta_Q2/self.Q_value_positive_torque_2)]
+            # return [-1,-1]
+
+        elif direction1 == "negative1" and direction2 == "negative2":
+            delta_Q1 = (self.Q_value_negative_torque_1 - self.prev_Q_value_negative_torque_1)
+            delta_Q2 = (self.Q_value_negative_torque_2 - self.prev_Q_value_negative_torque_2)
+
+            if delta_Q1 == 0 and delta_Q2 == 0:
+                return [self.negative_force, self.link_2negative_force]
+            elif delta_Q1 == 0 and not delta_Q2 == 0:
+                return [self.negative_force, self.link_2negative_force - self.alpha * (delta_Q2/self.Q_value_negative_torque_2)]
+            elif not delta_Q1 == 0 and delta_Q2 == 0:
+                return [self.negative_force - self.alpha * (delta_Q1/self.Q_value_negative_torque_1), self.link_2negative_force]
+            elif not delta_Q1 == 0 and not delta_Q2 == 0:
+                return [self.negative_force - self.alpha * (delta_Q1/self.Q_value_negative_torque_1), self.link_2negative_force - self.alpha * (delta_Q2/self.Q_value_negative_torque_2)]
+            # return [-1,1]
+
+        # if direction == "negative":
+        #     delta_Q = self.Q_value_negative_force - self.prev_Q_value_negative_force
+        #     if delta_Q == 0:
+        #         return -1
+        #     elif not delta_Q == 0:
+
+        #         return self.alpha * (delta_Q)
+
+
+class world:
+
+    def __init__(self, P_lim1, V_lim1, P_lim2, V_lim2, step):
+        self.P_lim1 = P_lim1
+        self.V_lim1 = V_lim1
+        self.P_lim2 = P_lim2
+        self.V_lim2 = V_lim2
+
+        self.step = step
+        self.row_length1 = int(((2 * P_lim1) / step + 1))  # 100
+        self.col_length1 = int(((2 * V_lim1) / step + 1))  # 100
+        self.row_length2 = int(((2 * P_lim2) / step + 1))  # 100
+        self.col_length2 = int(((2 * V_lim2) / step + 1))  # 100
+        self.epsilon = 0.1
+
+        self.sim = two_link()
+        print("world")
+        # GRID
+        # Assume that this works --> I am not 100% sure if this works
+        self.states = [[[[Node((i * step) - P_lim1, (j * step) - V_lim1, (n * step) - P_lim2, (m * step) - V_lim2) for m
+                          in range(self.col_length1)] for n in range(self.row_length1)] for j in
+                        range(self.col_length2)] for i in range(self.row_length2)]
+
+        # self.states = [[[[Node((i*step) - P_lim1, (j*step) - V_lim1, (n*step) - P_lim2, (m*step) - V_lim2) for i in range(self.row_length1)] for j in range(self.col_length1) ] for n in range(self.row_length2)] for m in range(self.col_length2)]
+
+    def simulation_setup(self, time_step, torque1, torque2, mass1, mass2, l1, l2, I1, I2):
+        print("sim setup")
+        self.time_step = time_step
+        self.mass1 = mass1
+        self.mass2 = mass2
+        self.l1 = l1
+        self.l2 = l2
+        self.r1 = I1
+        self.r2 = I2
+        self.torque1 = torque1
+        self.torque2 = torque2
+
+    def get_co_ordinates(self, pos1, vel1, pos2, vel2):
+        i = (pos1 + self.P_lim1) / self.step
+        j = (vel1 + self.V_lim1) / self.step
+        n = (pos2 + self.P_lim2) / self.step
+        m = (vel2 + self.V_lim2) / self.step
+
+        return int(i), int(j), int(n), int(m)
+
+    def define_start_pos(self, pos1, vel1, pos2, vel2):
+        i, j, n, m = self.get_co_ordinates(pos1, vel1, pos2, vel2)
+
+        self.start = self.states[i][j][n][m]
+
+    def define_target_pos(self, pos1, vel1, pos2, vel2):
+        i, j, n, m = self.get_co_ordinates(pos1, vel1, pos2, vel2)
+        self.target = self.states[i][j][n][m]
+
+    def check_lim(self, pos1, vel1, pos2, vel2):
+        if abs(pos1) > self.P_lim1 or abs(vel1) > self.V_lim1 or abs(pos2) > self.P_lim2 or abs(vel2) > self.V_lim2:
+            return False
+        else:
+            return True
+
+    # MOTION MODEL --> update it according to the two link model
+    def motion(self, control_torque1, control_torque2):
+        # total_torque_1 = self.torque1 + control_torque1
+        # total_torque_2 = self.torque2 + control_torque2
+        # torque11 = [control_torque1, control_torque2]
+        self.sim.update_torq([control_torque1, control_torque2])
+        sol = self.sim.ODE45(self.time_step, self.current_pos1, self.current_vel1, self.current_pos2, self.current_vel2)
+
+        # if sol.y[0][0] > pi:
+        #     self.current_pos1 = sol.y[0][0] - (2 * pi)
+        # elif sol.y[0][0] < -pi:
+        #     self.current_pos1 = sol.y[0][0] + (2 * pi)
+        # else:
+        #     self.current_pos1 = sol.y[0][0]
+        #
+        self.current_pos1 = sol.y[0][0]
+        self.current_vel1 = sol.y[1][0]
+        # print(total_force)
+        # if sol.y[0][0] > pi:
+        #     self.current_pos2 = sol.y[0][0] - (2 * pi)
+        # elif sol.y[0][0] < -pi:
+        #     self.current_pos2 = sol.y[0][0] + (2 * pi)
+        # else:
+        #     self.current_pos2 = sol.y[0][0]
+        self.current_pos2 = sol.y[2][0]
+        self.current_vel2 = sol.y[3][0]
+        # acc = total_torque_1/self.mass
+        # print(acc)
+        # self.current_vel = self.current_vel + self.time_step*acc
+        # self.current_pos = self.current_pos + self.current_vel*self.time_step + 0.5*acc*(self.time_step**2)
+
+    def policy_Epsilon_greedy(self, current_node):
+        p = np.random.random()
+        if p <= self.epsilon:
+            return random.choice([ ["negative1", "negative2"], ["negative1", "positive2"], ["positive1", "negative2"], ["positive1", "positive2"]])
+        elif p > self.epsilon:
+            return current_node.get_max_action()
+
+    def learning(self):
+        print("learning")
+        self.alpha = 0.2
+        self.gamma = 0.9
+
+        t_init = time.time()
+        t_end = time.time()
+        iter = 0
+        while t_end - t_init <= 120:
+            print(iter)
+            current_node = self.start
+            self.current_pos1 = current_node.pos1
+            self.current_vel1 = current_node.vel1
+            self.current_pos2 = current_node.pos2
+            self.current_vel2 = current_node.vel2
+
+            print(current_node.pos1, current_node.vel1, current_node.pos2, current_node.vel2)
+
+            # RATE OF CHANGE OF ERROR
+            prev_error_p1 = self.target.pos1 - self.current_pos1
+            prev_error_v1 = self.target.vel1 - self.current_vel1
+
+            prev_error_p2 = self.target.pos2 - self.current_pos2
+            prev_error_v2 = self.target.vel2 - self.current_vel2
+            if iter > 100:
+                exit(1)
+            while not current_node == self.target and not current_node == None and t_end - t_init <= 120:
+                # print(current_node.pos)
+                # print(current_node == self.target )
+                action = self.policy_Epsilon_greedy(current_node)
+                print(action)
+
+                # force = alpha*deltaQ
+                # print(action[0],action[1])
+                # if action[0]=="positive1" or action[0] == "positive2":
+
+                force1, force2 = current_node.get_force(action[0], action[1])
+
+                # print(force)
+                self.motion(force1, force2)  # take action step
+                print(self.current_pos1, self.current_vel1, self.current_pos2, self.current_vel2)
+                # exit(1)
+
+                # AGENT MUST BE INSIDE THE POS AND VEL LIMIT
+                if not self.check_lim(self.current_pos1, self.current_vel1, self.current_pos2, self.current_vel2):
+                    reward = -10
+                    Q_ns_na = [0, 0]
+                    Q_s_a = current_node.get_Q_value(action)
+                    new_state = None
+
+                elif self.check_lim(self.current_pos1, self.current_vel1, self.current_pos2, self.current_vel2):
+                    i, j, n, m = self.get_co_ordinates(self.current_pos1, self.current_vel1, self.current_pos2,
+                                                       self.current_vel2)
+                    new_state = self.states[i][j][n][m]  # to do: must be within limit, will  give error if not
+
+                    # error term
+                    error_p1 = self.target.pos1 - self.current_pos1
+                    error_v1 = self.target.vel1 - self.current_vel1
+                    error_p2 = self.target.pos2 - self.current_pos2
+                    error_v2 = self.target.vel2 - self.current_vel2
+                    # if prev_error_p-error_p > 0;
+                    #     reward = 0.5
+                    # REWARD
+                    reward = 1 * np.sign(abs(prev_error_p1) - abs(error_p1)) + 0.1 * np.sign(
+                        abs(prev_error_v1) - abs(error_v1)) + 1 * np.sign(
+                        abs(prev_error_p2) - abs(error_p2)) + 0.1 * np.sign(abs(prev_error_v2) - abs(error_v2))
+
+                    if not np.sign(prev_error_p1) == np.sign(error_p1) or not np.sign(prev_error_p2) == np.sign(
+                            error_p2):
+                        reward += -10
+                    Q_ns_na = max([new_state.get_Q_value(["positive1", "positive2"]),
+                                   new_state.get_Q_value(["positive1", "negative2"]),
+                                   new_state.get_Q_value(["negative1", "negative2"]),
+                                   new_state.get_Q_value(["negative1", "positive2"])])
+                    # print(Q_ns_na)
+                    Q_s_a = current_node.get_Q_value(action)
+                    # print(Q_s_a)
+
+                    if new_state == self.target:
+                        reward += 5
+                        print("____________________________DONE___________________________")
+                        # time.sleep(3)
+                    else:
+                        reward += -0.1
+
+                # UPDATE STEP
+                print(reward)
+                # print(Q_s_a[0])
+                update_value1 = Q_s_a[0] + self.alpha * (reward + (self.gamma * Q_ns_na[0]) - Q_s_a[0])
+                update_value2 = Q_s_a[1] + self.alpha * (reward + (self.gamma * Q_ns_na[1]) - Q_s_a[1])
+
+                current_node.update_Q_value(update_value1, update_value2, action[0], action[1])
+                current_node = new_state
+                prev_error_v1 = error_v1
+                prev_error_p1 = error_p1
+                prev_error_v2 = error_v2
+                prev_error_p2 = error_p2
+
+                reward = 0
+                t_end = time.time()  # to cancel the sleep time
+            print("????????????????????????????step??????????????????????????????????")
+            print(self.current_pos1, self.current_vel1, self.current_pos2, self.current_vel2)
+
+            iter += 1
+
+        print("DONE")
+
+        # TESTING LOOP
+        print("------------------testing-----------------------")
+        time.sleep(5)
+        path = []
+        current_node = self.start
+
+        self.current_pos1 = current_node.pos1
+        self.current_vel1 = current_node.vel1
+        self.current_pos2 = current_node.pos2
+        self.current_vel2 = current_node.vel2
+        count = 0
+        while not current_node == self.target and not current_node == None and t_end - t_init <= 300:
+            count += 1
+
+            path.append([current_node.pos1, current_node.pos2])
+            action = current_node.get_max_action()
+            print(action)
+            force1, force2 = current_node.get_force(action[0], action[1])
+
+            # print(force)
+            self.motion(force1, force2)  # take action step
+            print(self.current_pos1, self.current_vel1, self.current_pos2, self.current_vel2)
+            # exit(1)
+            if not self.check_lim(self.current_pos1, self.current_vel1, self.current_pos2, self.current_vel2):
+                reward = -10
+                Q_ns_na = [0, 0]
+                Q_s_a = current_node.get_Q_value(action)
+                new_state = None
+
+            elif self.check_lim(self.current_pos1, self.current_vel1, self.current_pos2, self.current_vel2):
+                i, j, n, m = self.get_co_ordinates(self.current_pos1, self.current_vel1, self.current_pos2,
+                                                   self.current_vel2)
+                new_state = self.states[i][j][n][m]  # to do: must be within limit, will  give error if not
+
+                error_p1 = self.target.pos1 - self.current_pos1
+                error_v1 = self.target.vel1 - self.current_vel1
+                error_p2 = self.target.pos2 - self.current_pos2
+                error_v2 = self.target.vel2 - self.current_vel2
+
+                # if prev_error_p-error_p > 0;
+                #     reward = 0.5
+                # reward = 1 * np.sign(abs(prev_error_p) - abs(error_p)) + 0.1 * np.sign(abs(prev_error_v) - abs(error_v))
+                # if not np.sign(prev_error_p) == np.sign(error_p):
+                #     reward += -10
+                # Q_ns_na = max([new_state.get_Q_value("positive"), new_state.get_Q_value("negative")])
+                # Q_s_a = current_node.get_Q_value(action)
+
+                reward = 1 * np.sign(abs(prev_error_p1) - abs(error_p1)) + 0.1 * np.sign(
+                    abs(prev_error_v1) - abs(error_v1)) + 1 * np.sign(
+                    abs(prev_error_p2) - abs(error_p2)) + 0.1 * np.sign(abs(prev_error_v2) - abs(error_v2))
+
+                if not np.sign(prev_error_p1) == np.sign(error_p1) or not np.sign(prev_error_p2) == np.sign(error_p2):
+                    reward += -10
+                Q_ns_na = max([new_state.get_Q_value(["positive1", "positive2"]),
+                               new_state.get_Q_value(["positive1", "negative2"]),
+                               new_state.get_Q_value(["negative1", "negative2"]),
+                               new_state.get_Q_value(["negative1", "positive2"])])
+                Q_s_a = current_node.get_Q_value(action)
+
+                # print("new state")
+                print(new_state.pos1, new_state.pos2, new_state.vel1, new_state.vel2)
+                # print(self.target.pos1,self.target.pos2,self.target.vel1, self.target.vel2)
+
+                if new_state == self.target:
+                    reward += 5
+                    print("____________________________DONE___________________________")
+                    time.sleep(3)
+                    break
+                else:
+                    reward += -0.1
+
+            # print(reward)
+            # update_value = Q_s_a + self.alpha * (reward + (self.gamma * Q_ns_na) - Q_s_a)
+            # # print("new", update_value)
+            # current_node.update_Q_value(update_value, action)
+            # # print(current_node.Q_value_positive_force, current_node.Q_value_negative_force)
+            # current_node = new_state
+            # prev_error_v = error_v
+            # prev_error_p = error_p
+            # reward = 0
+            # UPDATE STEP
+            print(reward)
+            update_value1 = Q_s_a[0] + self.alpha * (reward + (self.gamma * Q_ns_na[0]) - Q_s_a[0])
+            update_value2 = Q_s_a[1] + self.alpha * (reward + (self.gamma * Q_ns_na[1]) - Q_s_a[1])
+
+            current_node.update_Q_value(update_value1, update_value2, action[0], action[1])
+            current_node = new_state
+            prev_error_v1 = error_v1
+            prev_error_p1 = error_p1
+            prev_error_v2 = error_v2
+            prev_error_p2 = error_p2
+
+            reward = 0
+            if count == 1000:
+                break
+
+        return path
+
+
+    def Q_learning(self):
+        print("learning")
+        self.alpha = 0.2
+        self.gamma = 0.9
+
+        t_init = time.time()
+        t_end = time.time()
+        iter = 0
+        while t_end - t_init <= 360*3:
+            print(iter)
+            # if iter > 1:
+            #     exit(1)
+            current_node = self.start
+            self.current_pos1 = current_node.pos1
+            self.current_vel1 = current_node.vel1
+            self.current_pos2 = current_node.pos2
+            self.current_vel2 = current_node.vel2
+
+            print(current_node.pos1, current_node.vel1, current_node.pos2, current_node.vel2)
+
+            # RATE OF CHANGE OF ERROR
+            prev_error_p1 = self.target.pos1 - self.current_pos1
+            prev_error_v1 = self.target.vel1 - self.current_vel1
+
+            prev_error_p2 = self.target.pos2 - self.current_pos2
+            prev_error_v2 = self.target.vel2 - self.current_vel2
+            # if iter > 100:
+            #     exit(1)
+            while not current_node == self.target and not current_node == None and t_end - t_init <= 2*360:
+                # print(current_node.pos)
+                # print(current_node == self.target )
+                action = self.policy_Epsilon_greedy(current_node)
+                force1, force2 = current_node.get_force(action[0], action[1])
+
+                # print(force)
+                self.motion(force1, force2)  # take action step
+
+                print(force1, force2)
+                print(self.current_pos1, self.current_vel1, self.current_pos2, self.current_vel2)
+
+                i, j, i2, j2 = self.get_co_ordinates(self.current_pos1, self.current_vel1, self.current_pos2, self.current_vel2)
+                # print(i, j)
+                if abs(i) >= int((self.row_length1) ) or abs(j) >= int(self.col_length1) or i < 0 or j < 0 or abs(i2) >= int((self.row_length2) ) or abs(j2) >= int(self.col_length2) or i2 < 0 or j2 < 0:
+
+                    if abs(i) >= int((self.row_length1)) or abs(j) >= int(self.col_length1) or i < 0 or j < 0:
+                        reward = -10
+                    if  abs(i2) >= int((self.row_length2) ) or abs(j2) >= int(self.col_length2) or i2 < 0 or j2 < 0:
+                        reward2 = -10
+                    Q_ns_na = [0,0]
+                    Q_s_a = current_node.get_Q_value(action)
+                    new_state = None
+
+                    Q_s_a = current_node.get_Q_value(action)
+
+                    # UPDATE STEP
+                    update_value1 = Q_s_a[0] + self.alpha * (reward + (self.gamma * Q_ns_na[0]) - Q_s_a[0])
+                    update_value2 = Q_s_a[1] + self.alpha * (reward2 + (self.gamma * Q_ns_na[1]) - Q_s_a[1])
+
+                    current_node.update_Q_value(update_value1, update_value2, action[0], action[1])
+                    current_node = new_state
+                    reward = 0  # reset reward for next step
+                    t_end = time.time()  # to cancel the sleep time
+
+                else:
+                    new_state = self.states[i][j][i2][j2]  # to do: must be within limit, will  give error if not
+
+                    # error term
+                    error_p1 = self.target.pos1 - self.current_pos1
+                    error_v1 = self.target.vel1 - self.current_vel1
+                    error_p2 = self.target.pos2 - self.current_pos2
+                    error_v2 = self.target.vel2 - self.current_vel2
+
+                    # REWARD
+                    reward = 1 * np.sign(abs(prev_error_p1) - abs(error_p1)) + 0.1 * np.sign(
+                        abs(prev_error_v1) - abs(error_v1))
+                    reward2 = 1 * np.sign(
+                        abs(prev_error_p2) - abs(error_p2)) + 0.1 * np.sign(abs(prev_error_v2) - abs(error_v2))
+
+                    if not np.sign(prev_error_p1) == np.sign(error_p1):
+                        reward += -3
+                    if not np.sign(prev_error_p2) == np.sign(
+                            error_p2):
+                        reward2 += -3
+
+                    Q_ns_na = max([new_state.get_Q_value(["positive1", "positive2"]),
+                                   new_state.get_Q_value(["positive1", "negative2"]),
+                                   new_state.get_Q_value(["negative1", "negative2"]),
+                                   new_state.get_Q_value(["negative1", "positive2"])])
+
+                    Q_s_a = current_node.get_Q_value(action)
+
+                    if new_state.pos1 == self.target.pos1 and new_state.vel1 == self.target.vel1 :
+                        # target reach reward
+                        reward += 10
+                    if new_state.pos2 == self.target.pos2 and new_state.vel2 == self.target.vel2:
+                        reward2 += 10
+                        print("____________________________DONE___________________________")
+                        # time.sleep(2)
+                    # elif reward <= 0:
+                    #     reward += -0.1
+                    #
+                    # if reward2 <= 0:
+                    #     reward2 += -0.1
+
+                    # UPDATE STEP
+                    # print(reward)
+                        # UPDATE STEP
+                    update_value1 = Q_s_a[0] + self.alpha * (reward + (self.gamma * Q_ns_na[0]) - Q_s_a[0])
+                    update_value2 = Q_s_a[1] + self.alpha * (reward2 + (self.gamma * Q_ns_na[1]) - Q_s_a[1])
+
+                    current_node.update_Q_value(update_value1, update_value2, action[0], action[1])
+                    current_node = new_state
+                    prev_error_v1 = error_v1
+                    prev_error_p1 = error_p1
+                    prev_error_v2 = error_v2
+                    prev_error_p2 = error_p2
+                    reward = 0
+                    t_end = time.time()  # to cancel the sleep time
+
+                print(self.current_pos1, self.current_vel1, self.current_pos2, self.current_vel2)
+
+            iter += 1
+            # if iter == 100:
+            #     exit(1)
+            print("???????????????????????????????step?????????????????????????????")
+            print(iter)
+            # if iter > 50:
+            #     break
+
+        path = []
+        current_node = self.start
+        self.current_pos1 = current_node.pos1
+        self.current_vel1 = current_node.vel1
+        self.current_pos2 = current_node.pos2
+        self.current_vel2 = current_node.vel2
+
+        print(current_node.pos1, current_node.vel1, current_node.pos2, current_node.vel2)
+
+        # RATE OF CHANGE OF ERROR
+        prev_error_p1 = self.target.pos1 - self.current_pos1
+        prev_error_v1 = self.target.vel1 - self.current_vel1
+
+        prev_error_p2 = self.target.pos2 - self.current_pos2
+        prev_error_v2 = self.target.vel2 - self.current_vel2
+        # if iter > 100:
+        #     exit(1)
+        t_end = time.time()
+        t_init = time.time()
+        while not current_node == self.target and not current_node == None and t_end - t_init <= 10:
+            # print(current_node.pos)
+            # print(current_node == self.target )
+            path.append([current_node.pos1, current_node.pos2])
+            action = current_node.get_max_action()
+            # action = self.policy_Epsilon_greedy(current_node)
+            force1, force2 = current_node.get_force(action[0], action[1])
+
+            # print(force)
+            self.motion(force1, force2)  # take action step
+
+            print(force1, force2)
+            print(self.current_pos1, self.current_vel1, self.current_pos2, self.current_vel2)
+
+            i, j, i2, j2 = self.get_co_ordinates(self.current_pos1, self.current_vel1, self.current_pos2,
+                                                 self.current_vel2)
+            # print(i, j)
+            if abs(i) >= int((self.row_length1)) or abs(j) >= int(self.col_length1) or i < 0 or j < 0 or abs(i2) >= int(
+                    (self.row_length2)) or abs(j2) >= int(self.col_length2) or i2 < 0 or j2 < 0:
+
+                if abs(i) >= int((self.row_length1)) or abs(j) >= int(self.col_length1) or i < 0 or j < 0:
+                    reward = -10
+                if abs(i2) >= int((self.row_length2)) or abs(j2) >= int(self.col_length2) or i2 < 0 or j2 < 0:
+                    reward2 = -10
+                Q_ns_na = [0, 0]
+                Q_s_a = current_node.get_Q_value(action)
+                new_state = None
+
+                Q_s_a = current_node.get_Q_value(action)
+
+                # UPDATE STEP
+                update_value1 = Q_s_a[0] + self.alpha * (reward + (self.gamma * Q_ns_na[0]) - Q_s_a[0])
+                update_value2 = Q_s_a[1] + self.alpha * (reward2 + (self.gamma * Q_ns_na[1]) - Q_s_a[1])
+
+                current_node.update_Q_value(update_value1, update_value2, action[0], action[1])
+                current_node = new_state
+                reward = 0  # reset reward for next step
+                t_end = time.time()  # to cancel the sleep time
+
+            else:
+                new_state = self.states[i][j][i2][j2]  # to do: must be within limit, will  give error if not
+
+                # error term
+                error_p1 = self.target.pos1 - self.current_pos1
+                error_v1 = self.target.vel1 - self.current_vel1
+                error_p2 = self.target.pos2 - self.current_pos2
+                error_v2 = self.target.vel2 - self.current_vel2
+
+                # REWARD
+                reward = 1 * np.sign(abs(prev_error_p1) - abs(error_p1)) + 0.1 * np.sign(
+                    abs(prev_error_v1) - abs(error_v1))
+                reward2 = 1 * np.sign(
+                    abs(prev_error_p2) - abs(error_p2)) + 0.1 * np.sign(abs(prev_error_v2) - abs(error_v2))
+
+                if not np.sign(prev_error_p1) == np.sign(error_p1):
+                    reward += 0
+                if not np.sign(prev_error_p2) == np.sign(
+                        error_p2):
+                    reward2 += 0
+
+                Q_ns_na = max([new_state.get_Q_value(["positive1", "positive2"]),
+                               new_state.get_Q_value(["positive1", "negative2"]),
+                               new_state.get_Q_value(["negative1", "negative2"]),
+                               new_state.get_Q_value(["negative1", "positive2"])])
+
+                Q_s_a = current_node.get_Q_value(action)
+
+                if new_state.pos1 == self.target.pos1 and new_state.vel1 == self.target.vel1:
+                    # target reach reward
+                    reward += 10
+                if new_state.pos2 == self.target.pos2 and new_state.vel2 == self.target.vel2:
+                    reward2 += 10
+                    print("____________________________DONE___________________________")
+                    time.sleep(2)
+                # elif reward <= 0:
+                #     reward += -0.1
+                #
+                # if reward2 <= 0:
+                #     reward2 += -0.1
+
+                # UPDATE STEP
+                # print(reward)
+                # UPDATE STEP
+                update_value1 = Q_s_a[0] + self.alpha * (reward + (self.gamma * Q_ns_na[0]) - Q_s_a[0])
+                update_value2 = Q_s_a[1] + self.alpha * (reward2 + (self.gamma * Q_ns_na[1]) - Q_s_a[1])
+
+                current_node.update_Q_value(update_value1, update_value2, action[0], action[1])
+                current_node = new_state
+                prev_error_v1 = error_v1
+                prev_error_p1 = error_p1
+                prev_error_v2 = error_v2
+                prev_error_p2 = error_p2
+                reward = 0
+                t_end = time.time()  # to cancel the sleep time
+
+            print(self.current_pos1, self.current_vel1, self.current_pos2, self.current_vel2)
+
+        iter += 1
+        # if iter == 100:
+        #     exit(1)
+        print("???????????????????????????????step?????????????????????????????")
+        print(iter)
+
+        return path
+
+
+if __name__ == '__main__':
+    sim_world = world(pi/2 + 0.5, 4, pi/2 + 0.5, 4, 0.1)
+    sim_world.simulation_setup(0.01, 0, 0, 0.8, 0.8, 0.5, 0.5, 0.5,
+                               0.5)  # (time_step, torque1, torque2, mass1, mass2, l1, l2, I1, I2)
+
+    # (pos1, pos2) -> (pi/2,0) -> lying right side
+    # (pos1, pos2) -> (0,0) -> upward position
+    # (pos1, pos2) -> (-pi/2,0) -> lying left side
+
+    sim_world.define_start_pos(1, 0, 0, 0)  # pos_1: 0, vel_1: 0, pos_2: 0,vel_2: 0 --> vel in rad/s and pos in rad
+    sim_world.define_target_pos(0, 0, 0, 0)
+    path = sim_world.Q_learning()
+
+    L = 0.2  # in our case l1+l2 = 2
+    # Initialize the animation plot. Make the aspect ratio equal so it looks right.
+    fig = plt.figure()
+    ax = fig.add_subplot(aspect='equal')
+    print(len(path))
+    theta1_0 = path[0][0]  # initial position of theta1
+    theta2_0 = path[0][1]  # initial position of theta2
+    # print(theta1_0, theta2_0)
+    # The pendulum rod, in its initial position.
+    x1_0, y1_0 = get_coords1(theta1_0)
+    x2_0, y2_0 = get_coords2(theta1_0, theta2_0)
+    line1, = ax.plot([0, x1_0], [0, y1_0], lw=3, c='k')
+    line2, = ax.plot([x1_0, x2_0], [y1_0, y2_0], lw=3, c='k')
+    # The pendulum bob: set zorder so that it is drawn over the pendulum rod.
+    bob_radius = 0.008
+    circle = ax.add_patch(plt.Circle(get_coords2(theta1_0, theta2_0), bob_radius,
+                                     fc='r', zorder=3))
+    # Set the plot limits so that the pendulum has room to swing!
+    ax.set_xlim(-L * 1.2, L * 1.2)
+    ax.set_ylim(-L * 1.2, L * 1.2)
+
+    nframes = len(path)
+    interval = 1
+    ani = animation.FuncAnimation(fig, animate, frames=nframes, repeat=True,
+                                  interval=interval)
+    # ani.save("ani")
+    # ani.save('the_movie.', writer='mencoder', fps=15)
+    plt.show()
